@@ -828,9 +828,9 @@
         "reporting",
         "example"
       ],
-      "version": "1.2.1",
+      "version": "1.2.2",
       "min_platform_version": "0.7.0",
-      "zip_url": "https://github.com/burnspring/toft-gallery/archive/refs/tags/batch-digest/v1.2.1.zip",
+      "zip_url": "https://github.com/burnspring/toft-gallery/archive/refs/tags/batch-digest/v1.2.2.zip",
       "path": "examples/batch-digest",
       "source_url": "https://github.com/burnspring/toft-gallery/tree/main/examples/batch-digest",
       "suggested_slug": "nightly-digest",

@@ -112,8 +112,12 @@ def main() -> int:
     if run is None:
         # Run by hand, off the platform: the report above is the whole output.
         return 0
-    if run.output_uri:
+    try:
         run.write_output_json(summary)
+    except toft.ToftError as err:
+        # A run started without an output location has nowhere to put one.
+        if getattr(err, "code", None) != "no_output":
+            raise
 
     to = recipients()
     if not to:
