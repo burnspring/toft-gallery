@@ -1,0 +1,72 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="pagehead">
+  <div>
+    <h1>Links</h1>
+    <p>A link ties a source app to an app on a target. It’s created by the
+       <strong>first successful deploy</strong>, and every later request for that app follows it.</p>
+  </div>
+</div>
+
+<div class="card">
+  {{if not (index $d "Links")}}
+    <div class="empty"><h3>No links yet</h3>
+      <p>The first successful migration of an app creates one. Until then, the approver chooses
+         the destination on the request.</p></div>
+  {{else}}
+  <div class="tablewrap"><table>
+    <thead><tr><th>App</th><th class="nowrap">Target</th><th class="nowrap">App on target</th><th>State</th><th class="drop-lg nowrap">Last checked</th><th></th></tr></thead>
+    <tbody>
+    {{range index $d "Links"}}
+      <tr data-row>
+        <td><a data-open href="{{url (printf "/apps/%s" .SourceAppID)}}">{{.SourceAppName}}</a>
+            <div class="mono xs muted">{{.SourceAppSlug}}</div></td>
+        <td class="nowrap">{{.TargetLabel}}</td>
+        <td class="mono small nowrap">{{if .AppURL}}<a href="{{.AppURL}}" target="_blank" rel="noopener">{{.TargetAppSlug}} ↗</a>{{else}}{{.TargetAppSlug}}{{end}}</td>
+        <td>{{template "_chip" .State}}
+          <div class="xs muted">{{.Detail}}</div>
+          {{if .SourceRelease}}<div class="xs muted">Source: {{.SourceRelease}}</div>{{end}}
+          {{if .TargetRelease}}<div class="xs muted">Target: {{.TargetRelease}}</div>{{end}}
+        </td>
+        <td class="drop-lg lastlooked">{{ago .CheckedAt}}</td>
+        <td>
+          {{if .CanSendNewest}}
+          <details>
+            <summary class="btn small">Send newest…</summary>
+            <form method="post" action="{{url (printf "/links/%s/send" .ID)}}" class="stack" style="margin-top:8px;min-width:280px">
+              <div class="field"><label>Reason</label><input name="reason" required
+                  placeholder="Why this release is going without a review"></div>
+              <div class="field"><label>Type <span class="mono">{{.TargetLabel}}</span> to confirm</label>
+                <input name="confirm" required></div>
+              <button class="primary small" type="submit">Send this release</button>
+              <p class="hint">Sends the newest release to the linked app without a second reviewer.
+                 The history records it as a fast-track.</p>
+            </form>
+          </details>
+          {{else if eq .State "diverged"}}
+            <span class="hint">Someone deployed to the target app directly. Raise a request to
+              migrate.</span>
+          {{end}}
+          {{if index $d "Editor"}}
+          <details style="margin-top:6px">
+            <summary class="btn small">Delete link…</summary>
+            <form method="post" action="{{url (printf "/links/%s/delete" .ID)}}" class="stack" style="margin-top:8px;min-width:280px">
+              <div class="field"><label>Type <span class="mono">{{.SourceAppSlug}}</span> to confirm</label>
+                <input name="confirm" required></div>
+              <button class="danger small" type="submit">Delete</button>
+              <p class="hint">No app is changed. The next request for this app is treated as a first
+                 deploy, and the approver chooses the destination again.</p>
+            </form>
+          </details>
+          {{end}}
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table></div>
+  <div class="body"><p class="hint">States are checked when this page is opened. <em>Not checked</em>
+     means one of the two installs didn’t answer.
+     {{if not (index $d "Editor")}}Only this app’s editors can delete a link.{{end}}</p></div>
+  {{end}}
+</div>
+{{end}}

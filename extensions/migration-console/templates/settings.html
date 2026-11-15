@@ -1,0 +1,71 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="pagehead"><div><h1>Settings</h1>
+  <p>Settings for this console only. Nothing here changes Toft.</p></div></div>
+
+<form class="card measure" method="post" action="{{url "/settings"}}">
+  <div class="body stack">
+
+    {{if $d.EmailOn}}
+    <div class="field">
+      <label for="ag">Administrators’ group</label>
+      <select id="ag" name="admin_group_id">
+        <option value="">Nobody — failures are only recorded in the history</option>
+        {{range $d.Groups}}
+          <option value="{{.ID}}" {{if eq .ID (index $d.Settings "admin_group_id")}}selected{{end}}>
+            {{.Name}}{{if not .Email}} — no address{{end}}</option>
+        {{end}}
+      </select>
+      <p class="hint">Emailed when a migration fails or can’t run, a linked app is gone, or a target
+         stops responding. Mail goes to the group’s <strong>own address</strong>, so the group must have one.</p>
+    </div>
+
+    <div class="field">
+      <label class="inline"><input type="checkbox" name="notify_by_default"
+        {{if eq (index $d.Settings "notify_requester_by_default") "true"}}checked{{end}} style="width:auto">
+        Check “Email me when it finishes” on new requests by default</label>
+    </div>
+    {{else}}
+    {{/* Absent, not off: with no email connection attached, the notification
+         settings are not in the interface at all. */}}
+    <div class="field">
+      <p class="small muted">Email settings appear here once an administrator attaches an email
+         connection to this app in Toft. Until then the console sends no email.</p>
+    </div>
+    {{end}}
+
+    <div class="field">
+      <label class="inline"><input type="checkbox" name="require_note"
+        {{if eq (index $d.Settings "require_note_on_new_request") "true"}}checked{{end}} style="width:auto">
+        A new request must carry a note for the reviewer</label>
+      <p class="hint">When on, a request without a note can’t be submitted.</p>
+    </div>
+
+    <div class="field">
+      <label for="tz">Time zone</label>
+      <input id="tz" name="time_zone" list="tzlist" autocomplete="off"
+             value="{{index $d.Settings "time_zone"}}" placeholder="UTC">
+      <datalist id="tzlist">{{range zones}}<option value="{{.}}">{{end}}</datalist>
+      <p class="hint">All times are shown in this zone, and scheduled times are entered in it. Leave blank for the install’s clock (UTC).</p>
+    </div>
+
+    <div class="field">
+      <label for="amax">Largest attachment (MB)</label>
+      <input id="amax" name="attachment_max_mb" type="text" inputmode="numeric"
+             value="{{index $d.Settings "attachment_max_mb"}}" placeholder="25">
+      <p class="hint">Between 1 and 100. Documents are stored in the console’s own database.</p>
+    </div>
+
+    <div class="field">
+      <label for="ranges">Private ranges a target may be in</label>
+      <input id="ranges" name="private_ranges_allowed"
+             value="{{index $d.Settings "private_ranges_allowed"}}"
+             placeholder="10.0.0.0/8, 192.168.0.0/16">
+      <p class="hint">Target addresses in private, loopback and link-local ranges are refused unless
+         listed here. Separate ranges with commas.</p>
+    </div>
+
+    <button class="primary" type="submit">Save</button>
+  </div>
+</form>
+{{end}}

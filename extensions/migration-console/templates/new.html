@@ -1,0 +1,236 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="pagehead">
+  <div>
+    <h1>New migration request</h1>
+    <p>A request moves <strong>one release</strong> of an app. If the app is deployed again before
+       the migration runs, the approved release is still the one that ships.</p>
+  </div>
+</div>
+
+{{if $d.Refusal}}
+  {{template "_notice" dict "Tone" "danger" "Title" "Couldn’t read the source install" "Body" $d.Refusal}}
+{{end}}
+
+{{if $d.Again}}
+  {{/* Said rather than implied. A form that quietly arrives full is one nobody
+       trusts; a form that says which request it copied, and that this is a new
+       one, is the same convenience without the ambiguity. */}}
+  {{template "_notice" dict "Tone" "info" "Title" "Filled in from an earlier request"
+      "Body" "Nothing has been submitted yet. Check the details and submit; this new request gets its own review."}}
+{{end}}
+
+{{if or $d.Promote $d.PromoteWhy}}
+{{if $d.PromoteWhy}}
+  {{template "_notice" dict "Tone" "attention" "Title" "This can’t be promoted" "Body" $d.PromoteWhy}}
+  {{with $d.Promote}}<p><a href="{{url (printf "/requests/%s" .ID)}}">Back to request #{{.Seq}}</a></p>{{end}}
+{{else}}
+{{$p := $d.Promote}}
+{{/* A promotion names no app and no release: both are copied, on the server,
+     from the request that deployed upstream. What the requester writes is what
+     is theirs to write. */}}
+<form class="card measure" method="post" action="{{url "/requests/new"}}">
+  <input type="hidden" name="promoted_from" value="{{$p.ID}}">
+  <div class="body stack">
+    <dl class="facts">
+      <dt>App</dt><dd>{{$p.SourceAppName}} <span class="mono xs muted">{{$p.SourceAppSlug}}</span></dd>
+      <dt>Release</dt><dd class="mono">{{$p.SourceReleaseLabel}}</dd>
+      <dt>Promoted from</dt><dd><a href="{{url (printf "/requests/%s" $p.ID)}}">#{{$p.Seq}}</a>,
+        deployed there as <span class="mono">{{$p.DestinationSlug}}</span>
+        {{if $p.BundleSHA256}}<div class="mono xs muted">sha256 {{short 16 $p.BundleSHA256}}…</div>{{end}}</dd>
+    </dl>
+    <p class="hint">The same bytes that were sent upstream are sent again. Nothing is downloaded from
+       this install.</p>
+
+    <div class="field">
+      <label for="target">Promote to</label>
+      <select id="target" name="target_id" required>
+        {{range $d.PromoteTargets}}<option value="{{.ID}}" {{if eq .ID $d.SelectedTarget}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+      <p class="hint">Targets that take releases from {{with index $d.PromoteTargets 0}}{{.RequiresLabel}}{{end}}.</p>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="slug">Name on the target</label>
+        <input id="slug" name="destination_slug" type="text" placeholder="{{$p.DestinationSlug}}" value="{{$d.DestSlug}}">
+        <p class="hint">Leave blank for the name used last time there, or {{$p.DestinationSlug}}.</p>
+      </div>
+      <div class="field">
+        <label for="vis">Visibility on the target</label>
+        <select id="vis" name="destination_visibility">
+          <option value="" {{if eq $d.DestVisibility ""}}selected{{end}}>Leave as it is</option>
+          <option value="private" {{if eq $d.DestVisibility "private"}}selected{{end}}>Private</option>
+          <option value="authenticated" {{if eq $d.DestVisibility "authenticated"}}selected{{end}}>Signed-in viewers</option>
+          <option value="public" {{if eq $d.DestVisibility "public"}}selected{{end}}>Public</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="reason">Reason</label>
+      <textarea id="reason" name="reason" placeholder="The change reference, and what was seen upstream.">{{$d.Reason}}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="note">Note for the reviewer{{if $d.NoteRequired}} <span class="req">Required</span>{{end}}</label>
+      <textarea id="note" name="note" {{if $d.NoteRequired}}required{{end}}>{{$d.Note}}</textarea>
+    </div>
+
+    <div class="field">
+      <label class="inline"><input type="checkbox" name="notify" checked style="width:auto"> Email me when it finishes</label>
+    </div>
+
+    <div class="inline">
+      <button class="primary" type="submit">Submit for review</button>
+      <a class="btn" href="{{url (printf "/requests/%s" $p.ID)}}">Cancel</a>
+    </div>
+  </div>
+</form>
+{{end}}
+{{else if not $d.Apps}}
+  <div class="card"><div class="empty">
+    <h3>No apps you can migrate</h3>
+    <p>You can migrate apps you own, directly or through a group, and apps you’ve been added to on
+       a request. Ask the app’s owner to raise the request or add you to one.</p>
+  </div></div>
+{{else if not $d.Targets}}
+  <div class="card"><div class="empty">
+    <h3>No targets yet</h3>
+    <p>A console editor adds targets on the Targets page, using a deploy-scoped key minted by an
+       administrator on that install.</p>
+  </div></div>
+{{else}}
+<form class="card measure" method="post" action="{{url "/requests/new"}}">
+  <div class="body stack">
+
+    <div class="field">
+      <label for="app">App</label>
+      <select id="app" name="app_id" required
+              hx-get="{{url "/releases"}}" hx-target="#releases" hx-trigger="change" hx-include="this">
+        <option value="">Choose…</option>
+        {{range $d.Apps}}
+          <option value="{{.ID}}" {{if eq .ID $d.Selected}}selected{{end}}>{{.Name}} ({{.Slug}})</option>
+        {{end}}
+      </select>
+      <p class="hint">Apps you own and apps you’ve been added to on a request.</p>
+    </div>
+
+    <div class="field">
+      <label>Release to migrate</label>
+      {{/* On load the fetch carries the release a "raise it again" link named,
+           so the row it preselects is the one somebody asked for. A later
+           change of the app re-fetches from the select's own hx-get, without
+           it — a different app has different releases, and carrying an id
+           across would preselect nothing or, worse, something. */}}
+      <div id="releases" hx-trigger="load" hx-include="#app"
+           hx-get="{{url "/releases"}}{{if $d.SelectedDeployment}}?want={{$d.SelectedDeployment}}{{end}}">
+        <p class="hint">Pick an app first.</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="target">Target</label>
+      <select id="target" name="target_id" required>
+        <option value="">Choose…</option>
+        {{range $d.Targets}}<option value="{{.ID}}" {{if eq .ID $d.SelectedTarget}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+      <p class="hint">The install this release is deployed to.</p>
+      {{if $d.Gated}}
+      <ul class="hint">{{range $d.Gated}}
+        <li><strong>{{.Label}}</strong>: promote from a deployed {{.RequiresLabel}} request.</li>{{end}}
+      </ul>
+      {{end}}
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="slug">Name on the target</label>
+        <input id="slug" name="destination_slug" type="text" placeholder="Same as here" value="{{$d.DestSlug}}">
+        <p class="hint">Leave blank to keep the current slug, or the name used last time. The approver
+           can change it.</p>
+      </div>
+      <div class="field">
+        <label for="vis">Visibility on the target</label>
+        <select id="vis" name="destination_visibility">
+          <option value="" {{if eq $d.DestVisibility ""}}selected{{end}}>Leave as it is</option>
+          <option value="private" {{if eq $d.DestVisibility "private"}}selected{{end}}>Private</option>
+          <option value="authenticated" {{if eq $d.DestVisibility "authenticated"}}selected{{end}}>Signed-in viewers</option>
+          <option value="public" {{if eq $d.DestVisibility "public"}}selected{{end}}>Public</option>
+        </select>
+        <p class="hint">The target install’s own settings can still restrict this.</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="reason">Reason</label>
+      <textarea id="reason" name="reason" placeholder="The change reference, what’s in it, and what to watch after it ships.">{{$d.Reason}}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="note">Note for the reviewer{{if $d.NoteRequired}} <span class="req">Required</span>{{end}}</label>
+      <textarea id="note" name="note" {{if $d.NoteRequired}}required{{end}}
+        placeholder="Anything the reviewer should read before deciding. You and the reviewer can edit this until it’s decided.">{{$d.Note}}</textarea>
+      <p class="hint">For this release only. Notes for <em>every</em> request go on the app’s page.</p>
+    </div>
+
+    <div class="field">
+      <label class="inline"><input type="checkbox" name="notify" checked style="width:auto"> Email me when it finishes</label>
+      <p class="hint">Works only if an administrator has attached an email connection to this app.</p>
+    </div>
+
+    <p class="hint">You can add documents and people to the request after you submit it.</p>
+
+    <div class="inline">
+      <button class="primary" type="submit">Submit for review</button>
+      <a class="btn" href="{{url "/"}}">Cancel</a>
+    </div>
+  </div>
+</form>
+{{end}}
+{{end}}
+
+{{define "releases"}}
+{{if not .}}<p class="hint">Pick an app first.</p>
+{{else if .Error}}
+  {{template "_notice" dict "Tone" "danger" "Title" "Couldn’t read releases" "Body" .Error}}
+{{else if not .Rows}}
+  <p class="hint">This app has no successful release to migrate.</p>
+{{else}}
+{{if .Locked}}
+  {{template "_notice" dict "Tone" "danger" "Title" "Locked by dependency policy on the source"
+      "Body" "Toft’s dependency policy has locked this app on this install. Fix the dependencies or get a waiver here before migrating it."}}
+{{end}}
+{{with .Refused}}
+  {{template "_notice" dict "Tone" "attention" "Title" (printf "The newest build, %s, was refused" .SHA)
+      "Body" (printf "The source’s dependency policy refused it, so it isn’t on this list. %s" .Reason)}}
+{{end}}
+{{if .Gone}}
+  {{template "_notice" dict "Tone" "attention" "Title" "That release is no longer available"
+      "Body" "The release from the earlier request has been removed from this install. Choose a release from the list below."}}
+{{end}}
+<div class="card flat"><div class="tablewrap"><table>
+  <thead><tr><th></th><th>Release</th><th class="drop-md">Dependencies</th></tr></thead>
+  <tbody>
+  {{range $i, $r := .Rows}}
+    <tr>
+      <td style="width:28px"><input type="radio" name="deployment_id" value="{{$r.ID}}" required
+          {{if $r.Wanted}}checked{{else if and $r.Current (not $.WantedAny)}}checked{{end}} style="width:auto"></td>
+      <td>
+        {{$r.Label}}
+        {{if $r.Current}}<span class="chip ok">Serving now</span>{{end}}
+        {{if $r.Wanted}}<span class="chip info">From earlier request</span>{{end}}
+      </td>
+      <td class="drop-md">
+        {{if $r.Verdict}}{{template "_chip" $r.Verdict}}
+        {{else if $r.Current}}<span class="muted xs">Not recorded</span>{{end}}
+        {{if $r.Why}}<div class="xs muted">{{$r.Why}}</div>{{end}}
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table></div></div>
+<p class="hint">Toft records a dependency verdict only for the release serving on the source.
+   <em>Not recorded</em> doesn’t mean <em>clean</em>.</p>
+{{end}}
+{{end}}

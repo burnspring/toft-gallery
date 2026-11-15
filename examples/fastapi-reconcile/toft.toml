@@ -1,0 +1,36 @@
+# Jobs are declared here and nowhere else: a job is part of the application
+# rather than part of its deployment, so it versions with the code it runs and a
+# rollback takes the command back with it.
+
+[runtime]
+python = ">=3.11"
+
+[jobs.close]
+command = "python worker.py"
+
+# Month-end, on the wall clock: 02:00 London on the 1st, through the clock
+# changes. The run is *for* the tick it fired on, so a close that starts late
+# still closes the month that just ended — worker.py reads it as
+# toft.run.scheduled_for.
+schedule      = "0 2 1 * *"
+timezone      = "Europe/London"
+
+# A close still going when the next one fires is a close that is wrong, not
+# slow. Skip the firing and record that it was skipped, rather than queue a
+# second close of the same ledger behind the first.
+overlap       = "skip"
+
+# No `expect_within`, on purpose. Its ceiling is 31d, and the gap between two
+# successful month-end closes is 31 days *plus* however long the second one
+# ran — so every long month would page somebody about a close that was fine.
+# `notify = "failures"` below covers the close that fails; the Nightly Digest
+# example shows the alarm for one that never happens.
+
+timeout = "15m"        # a real close is minutes
+notify  = "failures"   # one message per failed close; run it again with toft job rerun
+
+  [jobs.close.params.period]
+  type     = "string"
+  required = false
+  choices  = ["2026-04", "2026-05", "2026-06"]
+  help     = "Which month to close. Left out, the month before the run's scheduled time, else the settings document's."

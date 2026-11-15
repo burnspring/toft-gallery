@@ -1,0 +1,163 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="pagehead">
+  <div>
+    <h1>Targets</h1>
+    <p>The installs this console can deploy to, and this install as the source.</p>
+  </div>
+</div>
+
+<div class="stack">
+  <div class="card">
+    <div class="cardhead"><h2>This install</h2></div>
+    {{if $d.Source}}
+      <div class="tablewrap"><table><tbody>{{template "targetrow" $d.Source}}</tbody></table></div>
+    {{else}}
+      <div class="empty">
+        <h3>The source hasn’t been added</h3>
+        <p>Mint a deploy key on this install with the <strong>read</strong> scope and add it below.
+           The console uses it only to read releases.</p>
+        {{if $d.OwnAddress}}<p>Use <code>{{$d.OwnAddress}}</code> as the source’s address. It’s the
+           address Toft gives this app, and it’s accepted even if it’s private.</p>{{end}}
+      </div>
+    {{end}}
+  </div>
+
+  <div class="card">
+    <div class="cardhead"><h2>Targets</h2></div>
+    {{if not $d.Targets}}
+      <div class="empty"><h3>No targets</h3>
+        <p>Ask an administrator on the other install to mint a <strong>deploy</strong>-scoped key
+           there, then add it below.</p></div>
+    {{else}}
+    {{if $d.Chains}}
+    <div class="body"><p class="small">Promotion order:
+      {{range $i, $c := $d.Chains}}{{if $i}} · {{end}}<strong>{{$c}}</strong>{{end}}</p></div>
+    {{end}}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Label</th><th>Address</th><th>Key</th><th>Last test</th><th class="drop-lg">Owner group</th><th></th></tr></thead>
+      <tbody>{{range $d.Targets}}{{template "targetrow" .}}{{end}}</tbody>
+    </table></div>
+    {{end}}
+  </div>
+
+  {{$e := $d.Editing}}
+  <form class="card measure" id="targetform" method="post" action="{{url "/targets"}}">
+    <div class="cardhead"><h2>{{if $e}}Editing {{$e.Label}}{{else}}Add a target{{end}}</h2>
+      {{if $e}}<a class="small" style="margin-left:auto" href="{{url "/targets"}}">Add a new one instead</a>{{end}}</div>
+    <div class="body stack">
+      {{if $e}}<input type="hidden" name="id" value="{{$e.ID}}">{{end}}
+      <div class="row">
+        <div class="field">
+          <label for="kind">Type</label>
+          <select id="kind" name="kind">
+            <option value="target" {{if $e}}{{if eq $e.Kind "target"}}selected{{end}}{{end}}>A target to deploy to</option>
+            <option value="source" {{if $e}}{{if eq $e.Kind "source"}}selected{{end}}{{end}}>This install (the source)</option>
+          </select>
+        </div>
+        <div class="field"><label for="label">Label</label>
+          <input id="label" name="label" required placeholder="Production" value="{{if $e}}{{$e.Label}}{{end}}">
+          <p class="hint">Name it after the environment, not the machine.</p></div>
+      </div>
+      <div class="field"><label for="base">Address</label>
+        <input id="base" name="base_url" type="url" required placeholder="https://toft.example.com" value="{{if $e}}{{$e.BaseURL}}{{end}}">
+        <p class="hint">HTTPS only, with no credentials in the URL. Private addresses need their range
+           allowed in Settings.</p></div>
+      <div class="field"><label for="key">Deploy key</label>
+        <input id="key" name="deploy_key" type="password" placeholder="toftd_…" autocomplete="off">
+        <p class="hint">Only its prefix is shown after saving.
+           {{if $e}}Leave blank to keep the stored key ({{$e.KeyPrefix}}…), or enter a new one to
+           replace it.{{else}}When editing, leave blank to keep the stored key.{{end}}</p></div>
+      {{/* A picker once the row exists, a text field before it does — and the
+           asymmetry is not an oversight. The groups are on *that* install, so
+           asking for them needs its address and its key, which is precisely
+           what this form is in the middle of collecting. On an edit both are
+           already stored and tested, so the list is there to be read; on a
+           create there is nothing to ask yet, and a picker that could only ever
+           be empty is worse than the box it replaced. */}}
+      {{if and $e $d.EditingGroups}}
+      <div class="field">
+        <label for="grp">Apps created on {{$e.Label}} are owned by</label>
+        <select id="grp" name="default_owner_group_id">
+          <option value="">No fixed group — the approver picks one each time</option>
+          {{range $d.EditingGroups}}
+            <option value="{{.ID}}" {{if eq .ID $e.DefaultOwnerGroupID}}selected{{end}} {{if eq .Members 0}}disabled{{end}}>
+              {{.Name}}{{if eq .Members 0}} — no members, can’t own an app{{else}} · Members: {{.Members}}{{end}}
+            </option>
+          {{end}}
+        </select>
+        <p class="hint">Every app the console creates on {{$e.Label}} is owned by this group — the approver
+           doesn’t choose. Apps already there keep their owner. A group with no members can’t be chosen.</p>
+      </div>
+      {{else}}
+      <div class="row">
+        <div class="field"><label for="grp">Owning group id for apps created there (targets only)</label>
+          <input id="grp" name="default_owner_group_id" placeholder="Group id on that install" value="{{if $e}}{{$e.DefaultOwnerGroupID}}{{end}}">
+          <p class="hint">Every app the console creates there is owned by this group. Blank, the approver picks one each time.
+            {{if $e}}{{if $d.EditingGroupsWhy}}<br>{{$d.EditingGroupsWhy}}{{end}}
+            {{else}}After the target is saved, editing it shows a list of its groups.{{end}}</p></div>
+        <div class="field"><label for="grpn">Group name</label><input id="grpn" name="default_owner_group_name" value="{{if $e}}{{$e.DefaultOwnerGroupName}}{{end}}"></div>
+      </div>
+      {{end}}
+      <div class="field">
+        <label for="req">Takes releases from</label>
+        <select id="req" name="requires_target_id">
+          <option value="">Any request (no earlier target required)</option>
+          {{range $d.Targets}}{{if or (not $e) (ne .ID $e.ID)}}
+            <option value="{{.ID}}" {{if $e}}{{if eq .ID $e.RequiresTargetID}}selected{{end}}{{end}}>Promotions from {{.Label}}</option>
+          {{end}}{{end}}
+        </select>
+        <p class="hint">With a target chosen, a request here must promote a request that deployed
+           there, and ships the bytes the console kept from it. Targets only; ignored for this install.</p>
+      </div>
+      <div class="field">
+        <label class="inline"><input type="checkbox" name="requires_lockfile" style="width:auto"
+          {{if $e}}{{if $e.RequiresLockfile}}checked{{end}}{{end}}> Require locked dependencies</label>
+        <p class="hint">A promotion here needs the earlier target’s SBOM to say every ecosystem’s lockfile
+           was read, or a reviewer’s waiver. Needs the dependency policy on there. A Python app
+           counts as locked only with a hashed <code>requirements.txt</code>.</p>
+      </div>
+      <div class="field">
+        <label class="inline"><input type="checkbox" name="fast_track" style="width:auto"
+          {{if $e}}{{if $e.FastTrack}}checked{{end}}{{end}}> Allow fast-track sends to linked apps</label>
+        <p class="hint">Lets a reviewer send the source’s current release to an already-linked app
+           without a second review. A reason is required, and the history flags it.</p>
+      </div>
+      <div class="inline">
+        <button class="primary" type="submit">Test and save</button>
+        <span class="hint">Nothing is saved on a failed test.</span>
+      </div>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{define "targetrow"}}
+<tr id="target-{{.ID}}">
+  <td><strong>{{.Label}}</strong>
+    {{if eq .Kind "source"}}<div class="xs muted">Read-only source</div>{{end}}
+    {{if .FastTrack}}<div><span class="chip attention">Fast-track allowed</span></div>{{end}}
+    {{if .RequiresTargetID}}<div class="xs muted">Takes releases from {{if .RequiresLabel}}{{.RequiresLabel}}{{else}}another target{{end}}{{if .RequiresLockfile}} · locked dependencies only{{end}}</div>{{end}}</td>
+  <td class="mono small">{{.BaseURL}}</td>
+  <td class="mono xs muted">{{.KeyPrefix}}…</td>
+  <td>
+    {{if .LastTestedAt}}
+      {{if .Reached}}<span class="chip ok">Reached</span>{{else}}<span class="chip danger">Failed</span>{{end}}
+      <div class="lastlooked">{{ago .LastTestedAt}}</div>
+      <div class="xs muted">{{.LastTestResult}}</div>
+    {{else}}<span class="chip neutral">Not checked</span>{{end}}
+  </td>
+  <td class="drop-lg small">{{if .DefaultOwnerGroupName}}{{.DefaultOwnerGroupName}}{{else}}<span class="muted">—</span>{{end}}</td>
+  <td>
+    <div class="inline rowactions">
+      <button class="small" hx-post="{{url (printf "/targets/%s/test" .ID)}}"
+              hx-target="#target-{{.ID}}" hx-swap="outerHTML">Test</button>
+      <a class="btn small" href="{{url (printf "/targets?edit=%s" .ID)}}#targetform">Edit</a>
+      <form method="post" action="{{url (printf "/targets/%s/delete" .ID)}}"
+            onsubmit="return confirm('Remove {{.Label}}? Requests already raised for it keep their history.')">
+        <button class="small" type="submit">Remove</button>
+      </form>
+    </div>
+  </td>
+</tr>
+{{end}}

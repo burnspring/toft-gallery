@@ -1,0 +1,50 @@
+{{define "content"}}
+<div class="pagehead">
+  <div>
+    <h1>What this install still needs</h1>
+    <p>An extension starts with no access, so the console needs these administrator steps before it works.</p>
+  </div>
+</div>
+
+<div class="card measure">
+  <div class="body">
+    <ol class="stack" style="padding-left:20px">
+      {{range .Setup}}
+      <li>
+        <div class="inline">
+          <strong>{{.Title}}</strong>
+          {{if .Done}}<span class="chip ok">Done</span>
+          {{else if .Unknown}}<span class="chip neutral">Not recorded</span>
+          {{else if .Optional}}<span class="chip neutral">Optional</span>
+          {{else}}<span class="chip attention">Outstanding</span>{{end}}
+        </div>
+        <div class="small muted">{{.Body}}</div>
+      </li>
+      {{end}}
+    </ol>
+    <p class="hint">Migrations run in the background: <code>process-migrations</code>, a Toft job
+       declared in this app’s <code>toft.toml</code>, runs every five minutes. It starts approved
+       migrations that are due, follows their builds on the target and re-tests targets. Approving a
+       migration to run now starts it straight away. Its logs and pause are on this app’s Automation tab.
+       <em>Not recorded</em> means Toft has no runs to report yet, not that the job is missing.</p>
+    {{if .Caller.Editor}}
+    <form method="post" action="{{url "/health/tick"}}" style="margin-top:12px">
+      <button type="submit">Process migrations now</button>
+      <span class="hint">Runs the job once, in your name, instead of waiting for the next five-minute run.</span>
+    </form>
+    {{end}}
+  </div>
+</div>
+
+<div class="card measure" style="margin-top:16px">
+  <div class="cardhead"><h2>What this app can reach</h2></div>
+  <div class="body small">
+    <p>The console holds two kinds of credential. On this install, a <strong>read-scoped</strong>
+       deploy key that lists apps and groups, reads deployment history and dependency verdicts, and
+       downloads releases. It can’t deploy anything. On each target, a <strong>deploy-scoped</strong>
+       key minted there by an administrator of that install.</p>
+    <p>It never acts as you. Your role decides what you may do here, and your identity is what the
+       history records.</p>
+  </div>
+</div>
+{{end}}
